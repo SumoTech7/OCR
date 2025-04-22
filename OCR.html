@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>محول النص العربي - OCR</title>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.14.305/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Tajawal', sans-serif;
+      background: #F5F7FB;
+      overflow-x: hidden;
+    }
+    .dark-mode {
+      background: #2D3748;
+      color: white;
+    }
+    .logo img {
+      width: 10px; /* تم تقليل الحجم هنا */
+      height: 10px; /* تم تقليل الحجم هنا */
+    }
+    .file-preview img {
+      width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .transition:hover {
+      transform: scale(1.05);
+    }
+    .input-file {
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+      padding: 10px;
+      width: 100%;
+      background-color: white;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: row;
+      gap: 30px;
+      padding: 20px;
+    }
+    .file-section, .output-section {
+      width: 50%;
+      padding: 20px;
+      background-color: white;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+    .file-section {
+      transition: transform 0.3s ease;
+    }
+    .file-section:hover {
+      transform: scale(1.02);
+    }
+    .output-section {
+      background: #F9F9F9;
+    }
+    .input-section {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body class="text-right">
+
+  <div class="container">
+    <!-- Left Section: File Upload -->
+    <div class="file-section">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+          <img src="https://cdn-icons-png.flaticon.com/128/8005/8005730.png" alt="OCR Logo">
+          <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white transition">محول النص العربي من الصور و PDF</h1>
+        </div>
+        <button id="toggleMode" class="bg-gray-800 text-white py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 transition duration-300">تبديل الوضع</button>
+      </div>
+
+      <p class="text-center text-gray-600 dark:text-gray-300 mb-4">استخدم هذه الأداة لتحويل الصور أو ملفات PDF إلى نص عربي قابل للنسخ.</p>
+
+      <div class="input-section">
+        <input type="file" id="fileInput" accept="image/*,.pdf" class="input-file mb-6" onchange="previewFile()">
+      </div>
+
+      <div id="filePreviewContainer" class="text-center mb-6"></div>
+
+      <button onclick="handleFile()" class="bg-blue-600 text-white py-3 px-6 rounded-lg w-full hover:bg-blue-700 transition duration-300 mb-4">ابدأ التحويل</button>
+    </div>
+
+    <!-- Right Section: Output & Actions -->
+    <div class="output-section">
+      <!-- Status Message -->
+      <p id="status" class="text-center text-gray-700 mt-4 dark:text-gray-300">📁 في انتظار تحميل الملف...</p>
+
+      <!-- Output Text Area -->
+      <textarea id="outputText" class="w-full h-64 p-4 mt-4 border-2 rounded-md bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none transition duration-300" readonly placeholder="النص المستخرج سيظهر هنا..."></textarea>
+
+      <!-- Action Buttons -->
+      <div class="mt-6 space-y-4">
+        <button onclick="copyText()" class="bg-green-600 text-white py-2 px-4 rounded-lg w-full hover:bg-green-700 transition duration-300">📋 نسخ النص</button>
+        <button onclick="downloadText('txt')" class="bg-purple-600 text-white py-2 px-4 rounded-lg w-full hover:bg-purple-700 transition duration-300">📥 تحميل النص (txt)</button>
+        <button onclick="downloadText('pdf')" class="bg-indigo-600 text-white py-2 px-4 rounded-lg w-full hover:bg-indigo-700 transition duration-300">📥 تحميل النص (PDF)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isDarkMode = false;
+    document.getElementById('toggleMode').addEventListener('click', function() {
+      isDarkMode = !isDarkMode;
+      document.body.classList.toggle('dark-mode', isDarkMode);
+    });
+
+    // Preview Image/File
+    function previewFile() {
+      const fileInput = document.getElementById('fileInput');
+      const filePreviewContainer = document.getElementById('filePreviewContainer');
+      const file = fileInput.files[0];
+
+      if (file && file.type.startsWith('image')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.classList.add('file-preview');
+          filePreviewContainer.innerHTML = ''; // Clear previous preview
+          filePreviewContainer.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    // Handle the file (either image or PDF)
+    async function handleFile() {
+      const fileInput = document.getElementById('fileInput');
+      const status = document.getElementById('status');
+      const output = document.getElementById('outputText');
+      const file = fileInput.files[0];
+
+      if (!file) return alert('الرجاء اختيار صورة أو ملف PDF.');
+
+      output.value = '';
+      status.textContent = '🔄 جاري المعالجة...';
+
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const pdfData = new Uint8Array(this.result);
+          const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+          let finalText = '';
+
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({ canvasContext: context, viewport }).promise;
+            const imgData = canvas.toDataURL();
+
+            const result = await Tesseract.recognize(imgData, 'ara', {
+              logger: m => console.log(m)
+            });
+            finalText += result.data.text + '\n';
+          }
+
+          output.value = finalText;
+          status.textContent = '✅ تم التحويل بنجاح!';
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const result = await Tesseract.recognize(file, 'ara', {
+          logger: m => console.log(m)
+        });
+        output.value = result.data.text;
+        status.textContent = '✅ تم التحويل بنجاح!';
+      }
+    }
+
+    // Copy Text to Clipboard
+    function copyText() {
+      const output = document.getElementById('outputText');
+      output.select();
+      document.execCommand('copy');
+      alert('تم نسخ النص!');
+    }
+
+    // Download Text as TXT or PDF
+    function downloadText(format) {
+      const output = document.getElementById('outputText').value;
+
+      if (format === 'txt') {
+        const blob = new Blob([output], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'output.txt';
+        link.click();
+      } else if (format === 'pdf') {
+        const doc = new jsPDF();
+        doc.text(output, 10, 10);
+        doc.save('output.pdf');
+      }
+    }
+  </script>
+</body>
+</html>
